@@ -2,7 +2,7 @@
 """collect the tokenized sentence from worker"""
 import logbook as logging
 import zmq
-from utils.appmetric_util import with_meter
+from utils.appmetric_util import AppMetric
 from utils.retry_util import retry
 
 
@@ -18,14 +18,15 @@ class WordGenerator(object):
             Number of times to retry, set to 0 to disable retry
     """
 
-    def __init__(self, ip, port, tries=20):
+    def __init__(self, ip, port, tries=20, name="word_generator", metric_interval=10):
         self.ip = ip
         self.port = port
         self.tries = tries
+        self.name = name
+        self.metric_interval = metric_interval
 
     @retry(lambda x: x.tries, exception=zmq.ZMQError,
-           name="vocabulary_collector", report=logging.error)
-    @with_meter('vocabulary_collector', interval=30)
+           name="word_generator", report=logging.error)
     def _on_recv(self, receiver):
         words = receiver.recv_pyobj(zmq.NOBLOCK)
         return words
@@ -35,9 +36,11 @@ class WordGenerator(object):
         context = zmq.Context()
         receiver = context.socket(zmq.PULL)
         receiver.bind("tcp://{}:{}".format(self.ip, self.port))
+        metric = AppMetric(name=self.name, interval=self.metric_interval)
         while True:
             try:
                 words = self._on_recv(receiver)
+                metric.notify(1)
             except zmq.ZMQError as e:
                 logging.error(e)
                 break
