@@ -40,10 +40,10 @@ class WordGenerator(object):
         while True:
             try:
                 words = self._on_recv(receiver)
-                metric.notify(1)
             except zmq.ZMQError as e:
                 logging.error(e)
                 break
             for word in words:
                 if len(word):
                     yield word
+            metric.notify(1)

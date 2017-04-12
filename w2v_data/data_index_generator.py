@@ -23,6 +23,8 @@ class DataIndexGenerator(object):
         self.port = port
         self.tries = tries
         self.vocabulary = vocabulary
+        self.name = name
+        self.metric_interval = metric_interval
 
     @retry(lambda x: x.tries, exception=zmq.ZMQError,
            name="data_index_generator", report=logging.error)
@@ -50,8 +52,8 @@ class DataIndexGenerator(object):
             try:
                 words = self._on_recv(receiver)
                 indexs = self.convert_words_to_id(words)
-                metric.notify(1)
                 yield indexs
             except zmq.ZMQError as e:
                 logging.error(e)
                 break
+            metric.notify(1)

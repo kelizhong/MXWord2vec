@@ -5,7 +5,7 @@ from multiprocessing import Process
 import zmq
 from zmq.decorators import socket
 from utils.data_util import tokenize
-from utils.appmetric_util import with_meter
+from utils.appmetric_util import AppMetric
 from utils.retry_util import retry
 
 
@@ -25,16 +25,16 @@ class WorkerProcess(Process):
             Process name
     """
 
-    def __init__(self, ip, frontend_port, backend_port, tries=10, name='WorkerProcess'):
+    def __init__(self, ip, frontend_port, backend_port, tries=10, name='WorkerProcess', metric_interval=10):
         Process.__init__(self)
         self.ip = ip
         self.frontend_port = frontend_port
         self.backend_port = backend_port
         self.tries = tries
         self.name = name
+        self.metric_interval = metric_interval
 
     @retry(lambda x: x.tries, exception=zmq.ZMQError, name='worker_parser', report=logging.error)
-    @with_meter('worker_parser', interval=30)
     def _on_recv(self, receiver):
         sentence = receiver.recv_string(zmq.NOBLOCK)
         return sentence
@@ -44,6 +44,7 @@ class WorkerProcess(Process):
     def run(self, receiver, sender):
         receiver.connect("tcp://{}:{}".format(self.ip, self.frontend_port))
         sender.connect("tcp://{}:{}".format(self.ip, self.backend_port))
+        metric = AppMetric(name=self.name, interval=self.metric_interval)
         while True:
             try:
                 sentence = self._on_recv(receiver)
@@ -52,3 +53,4 @@ class WorkerProcess(Process):
                 break
             tokens = tokenize(sentence)
             sender.send_pyobj(tokens)
+            metric.notify(1)
