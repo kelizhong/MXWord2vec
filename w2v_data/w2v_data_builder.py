@@ -5,7 +5,7 @@ from collections import Counter
 import gevent.monkey
 from utils.pickle_util import save_obj_pickle
 from w2v_data.ventilator import VentilatorProcess
-from w2v_data.worker import WorkerProcess
+from w2v_data.tokenizer_worker import TokenizerWorkerProcess
 from w2v_data.word_generator import WordGenerator
 from w2v_data.data_index_generator import DataIndexGenerator
 from utils.data_util import sentence_gen
@@ -63,21 +63,23 @@ class Word2vecDataBuilder(object):
         self.collector_port = collector_port
         self.overwrite = overwrite
 
-    def _start_data_stream_process(self):
+    def _start_data_stream_process(self, process_prefix="WorkerProcess"):
         process_pool = []
         v = VentilatorProcess(self.corpus_files, self.ip, self.ventilator_port, sentence_gen=self.sentence_gen)
         v.start()
         process_pool.append(v)
         for i in xrange(self.workers_num):
-            w = WorkerProcess(self.ip, self.ventilator_port, self.collector_port, name='WorkerProcess_{}'.format(i))
+            w = TokenizerWorkerProcess(self.ip, self.ventilator_port, self.collector_port, name='{}_{}'.format(process_prefix, i))
             w.start()
             process_pool.append(w)
         return process_pool
 
     def build_and_save_vocabulary(self):
+        process_pool = self._start_data_stream_process(process_prefix="VocabularyProcess")
         logging.info("Begin build vocabulary")
         w = WordGenerator(self.ip, self.collector_port)
         vocabulary_counter = Counter(w.generate())
+        self._terminate_process(process_pool)
         logging.info("Finish counting. {} unique words, a total of {} words in all files."
                      , len(vocabulary_counter), sum(vocabulary_counter.values()))
         freq = [[unk_word, 0], [bos_word, 0], [eos_word, 0]]
@@ -96,8 +98,10 @@ class Word2vecDataBuilder(object):
         logging.info("Begin build data index")
         data_index = list()
         index_generator = DataIndexGenerator(self.ip, self.collector_port, vocabulary)
-        for index in index_generator.generate():
+        for i, index in enumerate(index_generator.generate()):
             data_index += index
+            if i % 10000 == 0:
+                logging.info("Have processed {} data index".format(i))
         save_obj_pickle(data_index, self.data_index_save_path, self.overwrite)
         logging.info("Finish build data index")
 
@@ -110,16 +114,16 @@ class Word2vecDataBuilder(object):
                 continue
             count = int(math.pow(count * 1.0, 0.75))
             negative_data += [i for _ in range(count)]
+            if i % 10000 == 0:
+                logging.info("Have processed {} negative data".format(i))
         save_obj_pickle(negative_data, self.negative_data_save_path, self.overwrite)
         logging.info("Finish build negative data")
 
     def build_word2vec_dataset_and_vocabulary(self):
-        process_pool = self._start_data_stream_process()
-        vocabulary, vocabulary_frequency = self.build_and_save_vocabulary()
-        self._terminate_process(process_pool)
-        time.sleep(10)
 
-        process_pool = self._start_data_stream_process()
+        vocabulary, vocabulary_frequency = self.build_and_save_vocabulary()
+
+        process_pool = self._start_data_stream_process(process_prefix="DataProcess")
 
         gevent.joinall(
             [gevent.spawn(self.build_and_save_data_index, vocabulary),

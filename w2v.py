@@ -45,6 +45,8 @@ def parse_args():
                                   type=int,
                                   default=1,
                                   help='the file with the words which are the most command words in the corpus')
+    w2v_vocab_parser.add_argument('--top-words', default=1000000, type=int,
+                                  help='the max words num for training')
     w2v_vocab_parser.add_argument('files', nargs='+',
                                   help='the corpus input files')
 
@@ -68,8 +70,10 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     if args.action == 'w2v_vocab':
         from w2v_data.w2v_data_builder import Word2vecDataBuilder
+
         w2v_data = Word2vecDataBuilder(args.files, args.vocab_save_file, args.data_index_save_path,
-                                args.negative_data_save_path, workers_num=args.workers_num, sentence_gen=sentence_gen,
-                                overwrite=args.overwrite)
+                                       args.negative_data_save_path, workers_num=args.workers_num,
+                                       sentence_gen=sentence_gen,
+                                       overwrite=args.overwrite, top_words=args.top_words)
 
         w2v_data.build_word2vec_dataset_and_vocabulary()
