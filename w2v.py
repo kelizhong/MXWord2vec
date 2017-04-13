@@ -69,9 +69,9 @@ if __name__ == "__main__":
     setup_logger()
     signal.signal(signal.SIGINT, signal_handler)
     if args.action == 'w2v_vocab':
-        from w2v_data.w2v_data_builder import Word2vecDataBuilder
+        from w2v_data.w2v_gensim import GensimWord2vec
 
-        w2v_data = Word2vecDataBuilder(args.files, args.vocab_save_file, args.data_index_save_path,
+        w2v_data = GensimWord2vec(args.files, args.vocab_save_file, args.data_index_save_path,
                                        args.negative_data_save_path, workers_num=args.workers_num,
                                        sentence_gen=sentence_gen,
                                        overwrite=args.overwrite, top_words=args.top_words)
